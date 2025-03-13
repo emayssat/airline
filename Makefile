@@ -75,4 +75,4 @@ clean_tests:
 	rm -rf test*
 
 package_code: distclean
-	cd .. && tar --exclude='.git' cvzf challenge.gz airline
+	cd .. && tar --exclude='.git' -cvzf challenge.gz airline
