@@ -1,0 +1,7 @@
+name: French Airline
+airplanes:
+- name: FA101
+  row_count: 20
+  row_layout: xx_xxxx_xx
+  reserved_seats:
+  - A0
