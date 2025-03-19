@@ -9,7 +9,7 @@ from airplane import Airplane
 DEFAULT_DEBUG=False
 
 
-#%% airline class definiton
+#%% Airline class definiton
 class Airline:
     def __init__(self, name):
         """
@@ -28,9 +28,10 @@ class Airline:
         self.debug = os.environ.get("DEBUG", str(DEFAULT_DEBUG)).lower() in ("1", "true", "yes", "on")
         self.log(f'__init__ name={name}')
         self.name = name
+        # Note: self.airplanes is a dict where each (key, value) = (airplane_name, airplane_obj)
+        # Note: airplane_name == airplane_obj.name
         self.airplanes = {}
         self.default_snapshot_filename = f"{name.lower().replace(' ', '_')}.snap"
-        self.default_airplane_name = None
 
     def add_airplane(self, airplane_name, row_count=20, row_layout="xx_xxxx_xx"):
         """
@@ -50,18 +51,16 @@ class Airline:
             True
             >>> airline.add_airplane("TA101")  # Already exists
             False
-            >>> airline.default_airplane_name == 'TA101'
+            >>> 'TA101' in airline.airplanes.keys()
             True
         """
         self.log(f'add_airplane airplane_name={airplane_name} row_count={row_count} row_layout={row_layout}')
-        if airplane_name in self.airplanes:
+
+        # Check if airplane name is already registered
+        if airplane_name in self.airplanes.keys():
             return False
         
         self.airplanes[airplane_name] = Airplane(airplane_name, row_count, row_layout)
-
-        # If no default airplane name, default to the one that was just added
-        if self.default_airplane_name is None:
-            self.default_airplane_name = airplane_name
 
         return True
     
@@ -79,19 +78,19 @@ class Airline:
             True
             >>> airline.add_airplane("TA202")
             True
-            >>> "TA101" in airline.airplanes
+            >>> "TA101" in airline.airplanes.keys()
             True
             >>> airline.delete_airplane("TA101")
             True
-            >>> "TA101" in airline.airplanes
+            >>> "TA101" in airline.airplanes.keys()
             False
-            >>> "TA202" in airline.airplanes
+            >>> "TA202" in airline.airplanes.keys()
             True
             >>> airline.delete_airplane("TA999")  # Non-existent airplane
             False
         """
         self.log(f'delete_airplane airplane_name={airplane_name}')
-        if airplane_name in self.airplanes:
+        if airplane_name in self.airplanes.keys():
             del self.airplanes[airplane_name]
             return True
         return False
@@ -106,11 +105,11 @@ class Airline:
             
         Example:
             >>> airline = Airline("Test Airways")
-            >>> airline.add_airplane("TA101", 20)
+            >>> airline.add_airplane("TA101")
             True
             >>> plane = airline.get_airplane("TA101")
-            >>> plane.row_count
-            20
+            >>> plane.name == 'TA101'
+            True
             >>> airline.get_airplane("TA999") is None
             True
         """
@@ -149,7 +148,7 @@ class Airline:
             >>> airline.add_airplane("TA101")
             True
             >>> plane = airline.get_airplane("TA101")
-            >>> plane.book_seat("A2")
+            >>> plane.book_seats("A2", 1)
             True
             >>> airline.to_dict()  # Check dictionary structure with seat reservations
             {'name': 'Test Airways', 'airplanes': [{'name': 'TA101', 'row_count': 20, 'row_layout': 'xx_xxxx_xx', 'reserved_seats': ['A2']}]}
@@ -157,7 +156,7 @@ class Airline:
         self.log(f'to_dict')
         return {
             "name": self.name,
-            "airplanes": [airplane.to_dict() for airplane in self.airplanes.values()]
+            "airplanes": [airplane_obj.to_dict() for airplane_obj in self.airplanes.values()]
         }
     
     def load_snapshot(self, snapshot_filename=None):
@@ -167,25 +166,25 @@ class Airline:
             bool: True if added successfully, False if name already exists
 
         Example:
-            >>> airline = Airline("Test Airways")
-            >>> airline.add_airplane("TA101")
+            >>> airline = Airline("Test Airways")          # Create an airline
+            >>> airline.add_airplane("TA101")              # Add one plane
             True
-            >>> airline.add_airplane("TA202")
+            >>> airline.add_airplane("TA202")              # Add second plane
             True
-            >>> filename = 'test_load.snap'
-            >>> airline.save_snapshot(filename)
+            >>> filename = 'test_load_snapshot.snap'
+            >>> airline.save_snapshot(filename)            # Save the snapshot
             True
-            >>> airline.delete_airplane("TA101")
+            >>> airline.delete_airplane("TA101")           # Delete an airplane
             True
-            >>> airline.get_airplane("TA101") is None
+            >>> airline.get_airplane("TA101") is None      # Validate it is deleted
             True
-            >>> airline.load_snapshot(filename)
+            >>> airline.load_snapshot(filename)            # Restore the snapshot
             True
-            >>> airline.get_airplane("TA101") is not None
+            >>> airline.get_airplane("TA101") is not None  # Validate it is restored
             True
-            >>> os.path.exists(filename)
+            >>> os.path.exists(filename)                   # Check snapshot file exists
             True
-            >>> None # or os.remove(filename)
+            >>> None # or os.remove(filename)              # Delete snapshot file?
         """
         self.log(f'log_snapshot snapshot_filename={snapshot_filename}')
         if snapshot_filename is None:
@@ -202,9 +201,10 @@ class Airline:
                     data = yaml.safe_load(f)
                     if data:
                         # Load airplanes in addition to those already loaded
-                        for airplane_entry in data.get("airplanes", []):
-                            airplane = Airplane.from_dict(airplane_entry)
-                            self.airplanes[airplane.name] = airplane
+                        for airplane_dict in data.get("airplanes", []):
+                            airplane_obj = Airplane.from_dict(airplane_dict)
+                            airplane_name = airplane_obj.name
+                            self.airplanes[airplane_name] = airplane_obj
             except Exception as e:
                 sys.stderr.write(f"Error loading data: {str(e)}\n")
                 return False
@@ -218,15 +218,15 @@ class Airline:
             bool: True if completed successfully, False if snapshot filename is invalid
 
         Example:
-            >>> airline = Airline("Test Airways")
-            >>> airline.add_airplane("TA101")
+            >>> airline = Airline("Test Airways")    # Create airline
+            >>> airline.add_airplane("TA101")        # Add an airplane
             True
-            >>> filename = 'test_save.snap'
-            >>> airline.save_snapshot(filename)
+            >>> filename = 'test_save_snapshot.snap'
+            >>> airline.save_snapshot(filename)      # Save snapshot
             True
-            >>> os.path.exists(filename)
+            >>> os.path.exists(filename)             # Check snapshot file exists
             True
-            >>> None # or os.remove(filename)
+            >>> None # or os.remove(filename)        # Delete test snapshot file?
         """
         self.log(f'save_snapshot snapshot_filename={snapshot_filename}')
         if snapshot_filename is None:
@@ -249,7 +249,7 @@ class Airline:
     def log(self, message):
         """Prints debug messages if debugging is enabled."""
         if self.debug:
-            print(f"[DEBUG] [LINE] {message}")
+            print(f"[DEBUG] [LINE] {message}", file=sys.stderr)
 
 
 # %% doctesting

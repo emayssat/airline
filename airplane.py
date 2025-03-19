@@ -1,5 +1,6 @@
 #%% packages
 import os
+import sys
 
 #%% constants
 DEFAULT_DEBUG=False
@@ -25,6 +26,7 @@ class Airplane:
             'xx_xxxx_xx'
         """
         self.debug = os.environ.get("DEBUG", str(DEFAULT_DEBUG)).lower() in ("1", "true", "yes", "on")
+        self.log(f'__init__ name={name} row_count={row_count} row_layout={row_layout}')
         self._name = name            # private attribute
         self.row_count = row_count
         self.row_layout = row_layout
@@ -58,46 +60,14 @@ class Airplane:
         """
         if not isinstance(new_name, str) or not new_name.strip():
             raise ValueError("Airplane name must be a non-empty string.")
-        self._airplane_name = new_name
+        self._name = new_name
 
-    def get_seat_index(self, seat_name):
-        """
-        Convert seat name (e.g., A5) to row and position indices.
-        Args:
-            seat_name (str): Seat name in format [ROW_LETTER][POSITION]    
-        Returns:
-            int or None: Index of the seat, or None if invalid
-            
-        Example:
-            >>> plane = Airplane("TA101", 3)
-            >>> plane.get_seat_index("A1")
-            1
-            >>> plane.get_seat_index("B0")
-            8
-            >>> plane.get_seat_index("D0") is None
-            True
-            >>> plane.get_seat_index("A9") is None
-            True
-        """
-        self.log(f'get_seat_index seat_name={seat_name}')
-        if len(seat_name) < 2:
-            return None
-        row = ord(seat_name[0]) - ord('A')
-        try:
-            position = int(seat_name[1:])
-        except ValueError:
-            return None
-        
-        if row < 0 or row >= self.row_count or position < 0 or position >= self.seats_per_row:
-            return None
-        return row * self.seats_per_row + position
-
-    def get_seat_name(self, row, position):
+    def get_seat_name(self, row_idx, pos_idx):
         """
         Convert row and position indices to seat name (e.g., A5).
         Args:
-            row (int): Zero-based row index
-            position (int): Zero-based position within the row    
+            row_idx (int): Zero-based row index
+            pos_idx (int): Zero-based position within the row
         Returns:
             str: Seat name in format [ROW_LETTER][POSITION]
             
@@ -108,9 +78,9 @@ class Airplane:
             >>> plane.get_seat_name(2, 9)
             'C9'
         """
-        self.log(f'geet_seat_name row={row} position={position}')
-        return chr(ord('A') + row) + str(position)
-        # return chr(ord('A') + row) + str(position + 1)    # Add 1 to convert from 0-based to 1-based
+        self.log(f'get_seat_name row_idx={row_idx} pos_idx={pos_idx}')
+        return chr(ord('A') + row_idx) + str(pos_idx)
+        # return chr(ord('A') + row_idx) + str(pos_idx + 1)    # Add 1 to convert from 0-based to 1-based
 
     def check_consecutive_seats(self, start_seat_name, num_seats):
         """
@@ -136,54 +106,27 @@ class Airplane:
             False
         """
         self.log(f'check_consecutive_seats start_seat_name={start_seat_name} num_seats={num_seats}')
+
         if len(start_seat_name) < 2:
             return False
             
-        start_row = ord(start_seat_name[0]) - ord('A')
+        start_row_idx = ord(start_seat_name[0]) - ord('A')
         try:
             # substract 1 to convert from 1-based to 0-based
-            start_pos = int(start_seat_name[1:]) # - 1
+            start_pos_idx = int(start_seat_name[1:]) # - 1
         except ValueError:
             return False
         
         # Check if all requested seats are in the same row and within bounds
-        if start_row < 0 or start_row >= self.row_count or start_pos < 0 or start_pos + num_seats > self.seats_per_row:
+        if start_row_idx < 0 or start_row_idx >= self.row_count or start_pos_idx < 0 or start_pos_idx + num_seats > self.seats_per_row:
             return False
         
         # Check if all seats are available
         for i in range(num_seats):
-            seat_name = self.get_seat_name(start_row, start_pos + i)
+            seat_name = self.get_seat_name(start_row_idx, start_pos_idx + i)
             if seat_name in self.reserved_seats:
                 return False
                 
-        return True
-
-    def book_seat(self, seat_name):
-        """
-        Book a single seat by its name.
-        Args:
-            seat_name (str): Name of the seat to book (e.g., 'A1', 'B5')
-        Returns:
-            bool: True if booking was successful, False if seat is already reserved
-        
-        Example:
-            >>> plane = Airplane("TA101")
-            >>> plane.book_seat("A1")
-            True
-            >>> "A1" in plane.reserved_seats
-            True
-            >>> plane.book_seat("A1")  # Already reserved
-            False
-            >>> plane.book_seat("B5")
-            True
-            >>> sorted(list(plane.reserved_seats))
-            ['A1', 'B5']
-        """
-        self.log(f'book_seat seat_name={seat_name}')
-        if seat_name in self.reserved_seats:
-            return False
-        
-        self.reserved_seats.add(seat_name)
         return True
 
     def book_seats(self, start_seat_name, num_seats=1):
@@ -209,47 +152,22 @@ class Airplane:
             False
         """
         self.log(f'book_seats start_seat_name={start_seat_name} num_seats={num_seats}')
+
+        # Check if consecutive seats are available from the start_seat_name and for num_seats
         if not self.check_consecutive_seats(start_seat_name, num_seats):
             self.log('Not enough consecutive seats!')
             return False
         
-        start_row = ord(start_seat_name[0]) - ord('A')
-        start_pos = int(start_seat_name[1:]) # - 1   # Substract 1 to convert from 1-based to 0-based
+        start_row_idx = ord(start_seat_name[0]) - ord('A')
+        start_pos_idx = int(start_seat_name[1:]) # - 1   # Substract 1 to convert from 1-based to 0-based
         
         # Book all the seats
         for i in range(num_seats):
-            seat_name = self.get_seat_name(start_row, start_pos + i)
+            seat_name = self.get_seat_name(start_row_idx, start_pos_idx + i)
             self.log(f'Reserving seat: {seat_name}')
             self.reserved_seats.add(seat_name)
         
         return True
-
-    def cancel_seat(self, seat_name):
-        """
-        Cancel a seat reservation.
-        Args:
-            seat_name (str): Seat name to cancel    
-        Returns:
-            bool: True if cancellation was successful, False if seat wasn't reserved
-            
-        Example:
-            >>> plane = Airplane("TA101")
-            >>> plane.book_seat("B5")
-            True
-            >>> plane.reserved_seats
-            {'B5'}
-            >>> plane.cancel_seat("B5")
-            True
-            >>> "B5" in plane.reserved_seats
-            False
-            >>> plane.cancel_seat("A1")
-            False
-        """
-        self.log(f'cancel_seat {seat_name}')
-        if seat_name in self.reserved_seats:
-            self.reserved_seats.remove(seat_name)
-            return True
-        return False
     
     def cancel_seats(self, start_seat_name, num_seats=1):
         """
@@ -274,21 +192,21 @@ class Airplane:
         if len(start_seat_name) < 2:
             return False
 
-        start_row = ord(start_seat_name[0]) - ord('A')
+        start_row_idx = ord(start_seat_name[0]) - ord('A')
     
         try:
-            start_pos = int(start_seat_name[1:])  # Convert seat number to integer
+            start_pos_idx = int(start_seat_name[1:])  # Convert seat number to integer
         except ValueError:
             return False
 
         # Check if all requested seats are in the same row and within bounds
-        if start_row < 0 or start_row >= self.row_count or start_pos < 0 or start_pos + num_seats > self.seats_per_row:
+        if start_row_idx < 0 or start_row_idx >= self.row_count or start_pos_idx < 0 or start_pos_idx + num_seats > self.seats_per_row:
             return False
 
         for i in range(num_seats):
-            seat_name = self.get_seat_name(start_row, start_pos + i)
+            seat_name = self.get_seat_name(start_row_idx, start_pos_idx + i)
             if seat_name in self.reserved_seats:
-                self.reserved_seats.remove(seat_name)
+                self.reserved_seats.remove(seat_name)   # Cancel seats that have previously been reserved
             else:
                 return False  # At least one seat was not reserved
 
@@ -313,6 +231,7 @@ class Airplane:
             >>> sorted(data["reserved_seats"])
             ['A1']
         """
+        self.log(f'to_dict')
         return {
             "name": self.name,
             "row_count": self.row_count,
@@ -347,7 +266,7 @@ class Airplane:
     def log(self, message):
         """Prints debug messages if debugging is enabled."""
         if self.debug:
-            print(f"[DEBUG] [PLANE] {message}")
+            print(f"[DEBUG] [PLANE] {message}", file=sys.stderr)
 
 # %% doctest
 if __name__ == "__main__":
